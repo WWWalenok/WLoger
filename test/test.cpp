@@ -5,17 +5,14 @@
 
 void temp() 
 {
-	WLI << "INFO";
-	WLW << "WARNING";
-	WLE << "EROR";
+	WLE << "123123" << __WLOG_VALUE_TSTR(asdasdasdasd);
 }
-
+#include <thread>
 int main()
 {
 	ATTACH_STRAEM(WL_ERROR, std::cout);
 	ATTACH_STRAEM(WL_WARNING, std::cout);
 	ATTACH_STRAEM(WL_INFO, std::cout);
-
 	system("mkdir build");
 	system("mkdir build\\log");
 

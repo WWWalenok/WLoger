@@ -2,20 +2,33 @@
 #include "../Include/WLoger.h"
 
 #include <iostream>
-#include <iomanip>
-#include <vector>
-#include <numeric>
 #include <chrono>
+#include <thread>
+#include <vector>
+#include <unordered_map>
+#include <mutex>
+#include <iostream>
+#include <iomanip>
+#include <numeric>
+#include <unordered_map>
 
-std::map<unsigned int, std::vector<std::ostream*>> __loger__out__streams = std::map<unsigned int, std::vector<std::ostream*>>();
-std::map<unsigned int, std::string> __loger__name = std::map<unsigned int, std::string>();
-std::map<unsigned int, std::vector<wlmesage_t*>> __loger__buffers = std::map<unsigned int, std::vector<wlmesage_t*>>();
-std::map<unsigned int, std::mutex*> __loger__buffers_mutex = std::map<unsigned int, std::mutex*>();
+__generate_prefix_func_type __wloger_generate_prefix_func;
 
-void __WLOGER__SINGLTONE::generate_loger(unsigned int level, std::string name)
+std::stringstream __BAD_BUFFER = std::stringstream("");
+
+std::thread* sender_thread;
+
+bool stop_sender = false;
+
+std::unordered_map<unsigned int, std::vector<std::ostream*>> __loger__out__streams = std::unordered_map<unsigned int, std::vector<std::ostream*>>();
+std::unordered_map<unsigned int, std::string> __loger__name = std::unordered_map<unsigned int, std::string>();
+std::unordered_map<unsigned int, std::vector<wlmesage_t*>> __loger__buffers = std::unordered_map<unsigned int, std::vector<wlmesage_t*>>();
+std::unordered_map<unsigned int, std::mutex*> __loger__buffers_mutex = std::unordered_map<unsigned int, std::mutex*>();
+
+void __wloger_generate_loger(unsigned int level, std::string name)
 {
 	__loger__name[level] = name; 
-	if (!cond(level))
+	if (!__wloger_cond(level))
 	{
 		__loger__out__streams[level] = std::vector<std::ostream*>();
 		__loger__buffers[level] = std::vector<wlmesage_t*>();
@@ -23,14 +36,14 @@ void __WLOGER__SINGLTONE::generate_loger(unsigned int level, std::string name)
 	}
 }
 
-void __WLOGER__SINGLTONE::rename_loger(unsigned int level, std::string name)
+void __wloger_rename_loger(unsigned int level, std::string name)
 {
-	if(cond(level))
+	if(__wloger_cond(level))
 		__loger__name[level] = name;
 }
 
 
-bool __WLOGER__SINGLTONE::cond(unsigned int level)
+bool __wloger_cond(unsigned int level)
 {
 	return __loger__out__streams.find(level) != __loger__out__streams.end() 
 		&& __loger__name.find(level) != __loger__name.end() 
@@ -38,9 +51,9 @@ bool __WLOGER__SINGLTONE::cond(unsigned int level)
 		&& __loger__buffers_mutex.find(level) != __loger__buffers_mutex.end();
 }
 
-bool __WLOGER__SINGLTONE::attach_stream(unsigned int level, std::ostream* stream)
+bool __wloger_attach_stream(unsigned int level, std::ostream* stream)
 {
-	if (cond(level))
+	if (__wloger_cond(level))
 	{
 		auto *strams = &__loger__out__streams[level];
 		bool unic = true;
@@ -54,9 +67,9 @@ bool __WLOGER__SINGLTONE::attach_stream(unsigned int level, std::ostream* stream
 	return true;
 }
 
-bool __WLOGER__SINGLTONE::detach_stream(unsigned int level, std::ostream* stream)
+bool __wloger_detach_stream(unsigned int level, std::ostream* stream)
 {
-	if (cond(level))
+	if (__wloger_cond(level))
 	{
 		auto s = &__loger__out__streams[level];
 		for(int i = 0; i < s->size(); i++)
@@ -67,25 +80,6 @@ bool __WLOGER__SINGLTONE::detach_stream(unsigned int level, std::ostream* stream
 			}
 	}
 	return false;
-}
-
-__WLOGER__SINGLTONE* wloger = new __WLOGER__SINGLTONE();
-
-
-struct Guard {
-	~Guard() {
-		if (wloger)
-		{
-
-			delete wloger;
-		}
-	}
-};
-
-Guard guard = Guard();
-
-static void __WLogerShutdown() {
-	guard.~Guard();
 }
 
 #ifdef EXEPT_CAPTION_WLOG
@@ -259,13 +253,13 @@ static std::string __base_generate_prefix_func(wlmesage_t* message)
 
 
 	std::string out;
-	out.append("[");
+	out.append("\033[96m[");
 	out.append(buff);
 	out.append(".");
 	out.append(std::to_string((ms % 1000) / 100));
 	out.append(std::to_string((ms % 100) / 10));
 	out.append(std::to_string((ms % 10)));
-	out.append("] ");
+	out.append("]\033[0m \033[96m");
 	out.append(_file);
 	out.append(":");
 	out.append(std::to_string(message->line));
@@ -276,35 +270,25 @@ static std::string __base_generate_prefix_func(wlmesage_t* message)
 		out.append(" ");
 		out.append(message->func_name);
 	}
-	out.append(" => ");
+	out.append("\033[0m: ");
 	if (__loger__name.find(message->level) != __loger__name.end())
 		if (__loger__name[message->level].length() > 0)
 		{
-			out.append("\'");
+			if(message->level <= WL_ERROR)
+				out.append("\x1B[31m");
+			else if(message->level <= WL_WARNING)
+				out.append("\x1B[33m");
+			else if(message->level <= WL_INFO)
+				out.append("\x1B[32m");
+			else
+				out.append("\x1B[36m");
 			out.append(__loger__name[message->level]);
-			out.append("\' => ");
+			out.append("\033[0m: ");
 		}
 	return out;
 }
 
-void __WLOGER__SINGLTONE::INIT()
-{
-	WLOG_GET_EXE_PATH();
-#ifdef EXEPT_CAPTION_WLOG
-#if WLOG_OS_WINDOWS
-	SetUnhandledExceptionFilter((LPTOP_LEVEL_EXCEPTION_FILTER)TopLevelFilter);
-#endif
-#endif
-	__generate_prefix_func = __base_generate_prefix_func;
-
-	WLOG_GENERATE_LOGER(WL_ERROR, "ERROR");
-	WLOG_GENERATE_LOGER(WL_WARNING, "WARNING");
-	WLOG_GENERATE_LOGER(WL_INFO, "INFO");
-
-	sender_thread = new std::thread(&__WLOGER__SINGLTONE::sender, this);
-}
-
-void __WLOGER__SINGLTONE::__send()
+void __wloger_send()
 {
 	__BAD_BUFFER = std::stringstream("");
 
@@ -325,7 +309,7 @@ void __WLOGER__SINGLTONE::__send()
 	}
 	bool count = true;
 
-	std::map<std::ostream*, std::string> str_buffers;
+	std::unordered_map<std::ostream*, std::string> str_buffers;
 
 	for (auto _pair : __loger__out__streams)
 		for (auto stream : _pair.second)
@@ -361,7 +345,7 @@ void __WLOGER__SINGLTONE::__send()
 		if (best)
 		{
 			loger__buffers__lasts[best_i]++;
-			std::string str_buffer = wloger->__generate_prefix_func(best);
+			std::string str_buffer = __wloger_generate_prefix_func(best);
 			auto buffer = best->message;
 			if (!buffer)
 				continue;
@@ -401,7 +385,7 @@ void __WLOGER__SINGLTONE::__send()
 			stream->flush();
 }
 
-void  __WLOGER__SINGLTONE::sender()
+void  __wloger_sender()
 {
 	bool _stop_sender = false;
 	while (!_stop_sender)
@@ -409,12 +393,29 @@ void  __WLOGER__SINGLTONE::sender()
 		std::chrono::milliseconds timespan(20);
 		std::this_thread::sleep_for(timespan);
 		_stop_sender = stop_sender;
-		__send();
-		
+		__wloger_send();
+
 	}
 }
 
-std::stringstream* __WLOGER__SINGLTONE::__generate_loger_buffer(unsigned int level, bool cond, const char* file, const char* func, unsigned int line)
+void __wloger_INIT()
+{
+	WLOG_GET_EXE_PATH();
+#ifdef EXEPT_CAPTION_WLOG
+#if WLOG_OS_WINDOWS
+	SetUnhandledExceptionFilter((LPTOP_LEVEL_EXCEPTION_FILTER)TopLevelFilter);
+#endif
+#endif
+	__wloger_generate_prefix_func = __base_generate_prefix_func;
+
+	WLOG_GENERATE_LOGER(WL_ERROR, "ERROR");
+	WLOG_GENERATE_LOGER(WL_WARNING, "WARNING");
+	WLOG_GENERATE_LOGER(WL_INFO, "INFO");
+
+	sender_thread = new std::thread(&__wloger_sender);
+}
+
+std::stringstream* __wloger_generate_loger_buffer(unsigned int level, bool cond, const char* file, const char* func, unsigned int line)
 {
 	std::stringstream* ret = &__BAD_BUFFER;
 	if (cond && WLOG_LEVEL_COND(level)) {
@@ -442,16 +443,9 @@ std::stringstream* __WLOGER__SINGLTONE::__generate_loger_buffer(unsigned int lev
 	return ret;
 }
 
-__WLOGER__SINGLTONE::~__WLOGER__SINGLTONE() {
-	stop_sender = true;
-	sender_thread->join();
-	if (wloger == this)
-		wloger = 0;
-}
-
 #include <fstream>
 
-void __WLOGER__SINGLTONE::generate_log_files(std::string path)
+void __wloger_generate_log_files(std::string path)
 {
 	size_t pl = path.length();
 	if (path.length())
@@ -478,7 +472,35 @@ void __WLOGER__SINGLTONE::generate_log_files(std::string path)
 
 			*fout << "LOGING START : " << buff << "\n-=-=-=-=-=-=-=-=-=-=-=-=-=\n\n";
 
-			attach_stream(level, fout);
+			__wloger_attach_stream(level, fout);
 		}
 	}
+}
+
+
+
+
+
+
+
+
+
+struct Guard 
+{
+	Guard()
+	{
+		__wloger_INIT();
+	}
+
+	~Guard() 
+	{
+		stop_sender = true;
+		sender_thread->join();
+	}
+};
+
+Guard guard = Guard();
+
+static void __WLogerShutdown() {
+	guard.~Guard();
 }

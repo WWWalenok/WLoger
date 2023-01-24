@@ -1,17 +1,9 @@
 #pragma once
-#include <string>
-#include <sstream>
+
 #include <ostream>
+#include <string>
 #include <chrono>
-#include <thread>
-#include <queue>
-#include <vector>
-#include <map>
-#include <mutex>
-
-const static char WLOG_VERSION[] = "0.0.1";
-
-static const auto wlogger_start_time = std::chrono::high_resolution_clock::now();
+#include <sstream>
 
 #define WLOG_COMPILER_MSVC 0
 #define WLOG_COMPILER_MSVC 0
@@ -138,72 +130,50 @@ LONG WINAPI TopLevelFilter(struct _EXCEPTION_POINTERS* pExceptionInfo);
 
 static void __WLogerShutdown();
 
-struct __WLOGER__SINGLTONE {
+const static char WLOG_VERSION[] = "0.0.2";
 
-	struct __MESSAGE
-	{
-		std::stringstream* message;
-		std::chrono::system_clock::time_point time;
-		std::string file_name;
-		std::string func_name;
-		unsigned int line;
-		unsigned int level;
-		uint32_t straem_id;
-	};
+static const auto wlogger_start_time = std::chrono::high_resolution_clock::now();
 
-	bool stop_sender = false;
-
-	void INIT();
-
-	__WLOGER__SINGLTONE()
-	{
-		INIT();
-	}
-
-	std::stringstream __BAD_BUFFER = std::stringstream("");
-
-	typedef std::string(*__generate_prefix_func_type)(__MESSAGE*);
-
-	__generate_prefix_func_type __generate_prefix_func;
-
-	std::stringstream* __generate_loger_buffer(unsigned int level, bool cond, const char* file, const char* func, unsigned int line);
-
-	void generate_loger(unsigned int, std::string);
-
-	void rename_loger(unsigned int, std::string);
-
-	bool cond(unsigned int level);
-
-	bool attach_stream(unsigned int, std::ostream*);
-
-	bool detach_stream(unsigned int, std::ostream*);
-
-	void generate_log_files(std::string path);
-
-	~__WLOGER__SINGLTONE();
-private:
-
-	std::thread* sender_thread;
-
-	void __send(unsigned int level);
-	void __send();
-
-	void sender();
-
-
+struct __MESSAGE
+{
+	std::stringstream* message;
+	std::chrono::system_clock::time_point time;
+	std::string file_name;
+	std::string func_name;
+	unsigned int line;
+	unsigned int level;
+	uint32_t straem_id;
 };
-typedef __WLOGER__SINGLTONE::__MESSAGE wlmesage_t;
-
-extern __WLOGER__SINGLTONE* wloger;
 
 
-#define WL_ERROR 0x1000u
-#define WL_WARNING 0x2000u
-#define WL_INFO 0x3000u
+typedef std::string(*__generate_prefix_func_type)(__MESSAGE*);
+
+extern __generate_prefix_func_type __wloger_generate_prefix_func;
+
+std::stringstream* __wloger_generate_loger_buffer(unsigned int level, bool cond, const char* file, const char* func, unsigned int line);
+
+void __wloger_generate_loger(unsigned int, std::string);
+
+void __wloger_rename_loger(unsigned int, std::string);
+
+bool __wloger_cond(unsigned int level);
+
+bool __wloger_attach_stream(unsigned int, std::ostream*);
+
+bool __wloger_detach_stream(unsigned int, std::ostream*);
+
+void __wloger_generate_log_files(std::string path);
+
+typedef __MESSAGE wlmesage_t;
+
+
+static const unsigned int WL_ERROR = 0x1000u;
+static const unsigned int WL_WARNING = 0x2000u;
+static const unsigned int WL_INFO = 0x3000u;
 
 #define WLOG_LEVEL 0xffff
 
-#define WLOG_COND(level) (wloger->cond(level))
+#define WLOG_COND(level) (__wloger_cond(level))
 
 #define WLOG_NOT_COND(level) !WLOG_COND(level)
 
@@ -211,18 +181,24 @@ extern __WLOGER__SINGLTONE* wloger;
 
 #define WLOG_LEVE_NOT_COND(level) (WLOG_LEVEL < level || WLOG_NOT_COND(level)
 
-#define WLOG_GENERATE_LOGER(level, name) generate_loger(level, name);
+#define WLOG_GENERATE_LOGER(level, name) __wloger_generate_loger(level, name);
 
-#define WLOG_RENAME_LOGER(level, name) rename_loger(level, name);
+#define WLOG_RENAME_LOGER(level, name) __wloger_rename_loger(level, name);
 
-#define IF_WLOG(level, cond) *wloger->__generate_loger_buffer(level, cond, __FILE__, WLOG_FUNC, __LINE__)
+#define IF_WLOG(level, cond) *__wloger_generate_loger_buffer(level, cond, __FILE__, WLOG_FUNC, __LINE__)
 
 #define WLOG(level) IF_WLOG(level, true)
 
-#define ATTACH_STRAEM(level, stream) if(WLOG_COND(level)) wloger->attach_stream(level, &(stream));
+#define ATTACH_STRAEM(level, stream) if(WLOG_COND(level)) __wloger_attach_stream(level, &(stream));
 
-#define GENERATE_LOG_FILE(name) wloger->generate_log_files(name);
+#define GENERATE_LOG_FILE(name) __wloger_generate_log_files(name);
 
 #define WLI WLOG(WL_INFO)
 #define WLW WLOG(WL_WARNING)
 #define WLE WLOG(WL_ERROR)
+
+#define __WLOG_VALUE_TSTR(val) #val
+
+#define WLOG_VALUE(val) __WLOG_VALUE_TSTR(val) << " = " << val << "; "
+
+
