@@ -1,3 +1,6 @@
+#ifndef __WLOGER_H__
+#define __WLOGER_H__
+
 #pragma once
 
 #include <ostream>
@@ -91,8 +94,6 @@
 #define WLOG_OS_ANDROID 1
 #endif
 
-std::string WLOG_GET_EXE_PATH();
-
 #undef WLOG_FUNC
 #if defined(_MSC_VER)  // Visual C++
 #define WLOG_FUNC __FUNCSIG__
@@ -130,27 +131,49 @@ LONG WINAPI TopLevelFilter(struct _EXCEPTION_POINTERS* pExceptionInfo);
 
 static void __WLogerShutdown();
 
-const static char WLOG_VERSION[] = "0.0.2";
+const static char WLOG_VERSION[] = "0.0.3";
 
 static const auto wlogger_start_time = std::chrono::high_resolution_clock::now();
 
+struct __MESSAGE_DATA;
+
 struct __MESSAGE
 {
-	std::stringstream* message;
-	std::chrono::system_clock::time_point time;
-	std::string file_name;
-	std::string func_name;
-	unsigned int line;
-	unsigned int level;
-	uint32_t straem_id;
+    void *data;
+
+    void print(std::string);
+
+    template <typename T>
+    __MESSAGE& operator<<(const T& val)
+    {
+        std::stringstream message;
+        message << val;
+        print(message.str());
+        return *this;
+    }
+
+    __MESSAGE& operator<<(std::basic_ostream<char, std::char_traits<char>>&(*_Pfn)(std::basic_ostream<char, std::char_traits<char>>&))
+    {
+        std::ostringstream omes;
+        _Pfn(omes);
+        print(omes.str());
+        return *this;
+    }
+
+    __MESSAGE(void* = 0);
+    ~__MESSAGE();
 };
 
+typedef __MESSAGE_DATA wlmesage_t;
 
-typedef std::string(*__generate_prefix_func_type)(__MESSAGE*);
+
+typedef std::string(*__generate_prefix_func_type)(unsigned int, std::string file, std::string func, std::string cond, unsigned int line, std::chrono::system_clock::time_point time, uint32_t straem_id);
 
 extern __generate_prefix_func_type __wloger_generate_prefix_func;
 
-std::stringstream* __wloger_generate_loger_buffer(unsigned int level, bool cond, const char* file, const char* func, unsigned int line);
+__MESSAGE __wloger_generate_loger_buffer(unsigned int level, bool cond, const char* cond_str, const char* file, const char* func, unsigned int line);
+
+void __wloger_printf(unsigned int level, bool cond, const char* cond_str, const char* file, const char* func, unsigned int line, const char* format, ...);
 
 void __wloger_generate_loger(unsigned int, std::string);
 
@@ -164,14 +187,27 @@ bool __wloger_detach_stream(unsigned int, std::ostream*);
 
 void __wloger_generate_log_files(std::string path);
 
-typedef __MESSAGE wlmesage_t;
+void __wloger_generate_log_files(std::string path);
 
+unsigned int __wlog_get_log_level();
 
-static const unsigned int WL_ERROR = 0x1000u;
-static const unsigned int WL_WARNING = 0x2000u;
-static const unsigned int WL_INFO = 0x3000u;
+void __wlog_set_log_level(unsigned int);
 
-#define WLOG_LEVEL 0xffff
+static const unsigned int WL_FATAL = 0x1000u;
+static const unsigned int WL_ERROR = 0x2000u;
+static const unsigned int WL_WARNING = 0x3000u;
+static const unsigned int WL_INFO = 0x4000u;
+static const unsigned int WL_DEBUG = 0x5000u;
+
+#define __WLOG_VALUE_TSTR(val) #val
+
+#define WLOG_LEVEL __wlog_get_log_level()
+
+#define WLOG_SET_LEVEL(level) __wlog_set_log_level(level)
+
+#define WLOG_ATTACH_STRAEM(level, stream) __wloger_attach_stream(level, &(stream));
+
+#define WLOG_GENERATE_LOG_FILE(name) __wloger_generate_log_files(name);
 
 #define WLOG_COND(level) (__wloger_cond(level))
 
@@ -179,26 +215,40 @@ static const unsigned int WL_INFO = 0x3000u;
 
 #define WLOG_LEVEL_COND(level) (WLOG_LEVEL >= level &&  WLOG_COND(level))
 
-#define WLOG_LEVE_NOT_COND(level) (WLOG_LEVEL < level || WLOG_NOT_COND(level)
+#define WLOG_LEVE_NOT_COND(level) (WLOG_LEVEL < level || WLOG_NOT_COND(level))
 
-#define WLOG_GENERATE_LOGER(level, name) __wloger_generate_loger(level, name);
+#define WLOG_GENERATE_LOGER(level, name) __wloger_generate_loger(level, name)
 
-#define WLOG_RENAME_LOGER(level, name) __wloger_rename_loger(level, name);
+#define WLOG_RENAME_LOGER(level, name) __wloger_rename_loger(level, name)
 
-#define IF_WLOG(level, cond) *__wloger_generate_loger_buffer(level, cond, __FILE__, WLOG_FUNC, __LINE__)
+#define IF_WLOG(level, cond) __wloger_generate_loger_buffer(level, cond, __WLOG_VALUE_TSTR(cond), __FILE__, WLOG_FUNC, __LINE__)
 
 #define WLOG(level) IF_WLOG(level, true)
 
-#define ATTACH_STRAEM(level, stream) if(WLOG_COND(level)) __wloger_attach_stream(level, &(stream));
+#define IF_PWLOG(level, cond, ...) __wloger_printf(level, cond, __WLOG_VALUE_TSTR(cond), __FILE__, WLOG_FUNC, __LINE__, __VA_ARGS__)
 
-#define GENERATE_LOG_FILE(name) __wloger_generate_log_files(name);
+#define PWLOG(level, ...) IF_PWLOG(level, true, __VA_ARGS__)
+
+
+
+
+#define WLD WLOG(WL_DEBUG)
+#define PWLD(...) PWLOG(WL_DEBUG, __VA_ARGS__)
 
 #define WLI WLOG(WL_INFO)
-#define WLW WLOG(WL_WARNING)
-#define WLE WLOG(WL_ERROR)
+#define PWLI(...) PWLOG(WL_INFO, __VA_ARGS__)
 
-#define __WLOG_VALUE_TSTR(val) #val
+#define WLW WLOG(WL_WARNING)
+#define PWLW(...) PWLOG(WL_WARNING, __VA_ARGS__)
+
+#define WLE WLOG(WL_ERROR)
+#define PWLE(...) PWLOG(WL_ERROR, __VA_ARGS__)
+
+#define WLF WLOG(WL_FATAL)
+#define PWLF(...) PWLOG(WL_FATAL, __VA_ARGS__)
 
 #define WLOG_VALUE(val) __WLOG_VALUE_TSTR(val) << " = " << val << "; "
 
-
+#undef max
+#undef min
+#endif // __WLOGER_H__
