@@ -14,6 +14,12 @@
 #include <cmath>
 #include <algorithm>
 
+#if WLOG_COMPILER_GCC
+    #define va_start(v,l)   __builtin_va_start(v,l)
+    #define va_end(v)       __builtin_va_end(v)
+    #define va_arg(v,l)     __builtin_va_arg(v,l)
+#endif
+
 unsigned int __wlog_level = 0xffffu;
 
 unsigned int __wlog_get_log_level()

@@ -9,7 +9,7 @@
 #include <sstream>
 
 #define WLOG_COMPILER_MSVC 0
-#define WLOG_COMPILER_MSVC 0
+#define WLOG_COMPILER_GCC 0
 #define WLOG_COMPILER_CLANG 0
 #define WLOG_COMPILER_INTEL 0
 
@@ -35,6 +35,10 @@
 #if (defined(__clang__) && (__clang__ == 1))
 #undef WLOG_COMPILER_CLANG
 #define WLOG_COMPILER_CLANG 1
+#endif
+#if (defined(__GNUC__) && !defined(__clang__))
+#undef WLOG_COMPILER_GCC
+#define WLOG_COMPILER_GCC 1
 #endif
 #if (defined(__MINGW32__) || defined(__MINGW64__))
 #undef WLOG_MINGW
