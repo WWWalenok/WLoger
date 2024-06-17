@@ -108,7 +108,7 @@ jobs:
     
   publish:
     if: contains(github.ref, 'tags/v')
-    name: ${ { matrix.config.name } }
+    name: ${ { matrix.config.os } }_${ { matrix.config.c_compiler } }
     runs-on: ${ { matrix.config.os } }
     strategy:
       fail-fast: false
