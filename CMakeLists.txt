@@ -25,5 +25,5 @@ add_library(DWloger SHARED ${SRC} )
 add_library(Wloger STATIC ${SRC} )
 
 
-add_executable(test ${SRC} "test//test.cpp")
+add_executable(test ${SRC} "test/test.cpp")
 

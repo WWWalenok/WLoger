@@ -1,5 +1,5 @@
 
-#include "../Include/WLoger.h"
+#include "../include/WLoger.h"
 
 #include <iostream>
 
@@ -10,13 +10,13 @@ void temp()
 #include <thread>
 int main()
 {
-	ATTACH_STRAEM(WL_ERROR, std::cout);
-	ATTACH_STRAEM(WL_WARNING, std::cout);
-	ATTACH_STRAEM(WL_INFO, std::cout);
+	WLOG_ATTACH_STRAEM(WL_ERROR, std::cout);
+	WLOG_ATTACH_STRAEM(WL_WARNING, std::cout);
+	WLOG_ATTACH_STRAEM(WL_INFO, std::cout);
 	system("mkdir build");
-	system("mkdir build\\log");
+	system("mkdir build/log");
 
-	GENERATE_LOG_FILE("build\\log");
+	WLOG_GENERATE_LOG_FILE("build/log");
 
 	std::thread* ths[2];
 	
