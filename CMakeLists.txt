@@ -21,7 +21,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_SOURCE_DIR}/build>)
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 
-add_library(Wloger SHARED ${SRC} )
+add_library(DWloger SHARED ${SRC} )
 add_library(Wloger STATIC ${SRC} )
 
 
