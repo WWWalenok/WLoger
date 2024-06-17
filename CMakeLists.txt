@@ -7,8 +7,8 @@ set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
 set(SRC
-	${CMAKE_SOURCE_DIR}/Source/WLoger.cpp 
-	${CMAKE_SOURCE_DIR}/Include/WLoger.h
+	${CMAKE_SOURCE_DIR}/src/WLoger.cpp 
+	${CMAKE_SOURCE_DIR}/include/WLoger.h
 )
 
 message("CMAKE_BINARY_DIR : " ${CMAKE_BINARY_DIR})
