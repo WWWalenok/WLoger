@@ -7,8 +7,8 @@ set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
 set(SRC
-	Source/Wloger.cpp 
-	Include/WLoger.h
+	${CMAKE_SOURCE_DIR}/Source/Wloger.cpp 
+	${CMAKE_SOURCE_DIR}/Include/WLoger.h
 )
 
 message("CMAKE_BINARY_DIR : " ${CMAKE_BINARY_DIR})
@@ -22,7 +22,7 @@ set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 
 add_library(Wloger SHARED ${SRC} )
-add_library(libWloger STATIC ${SRC} )
+add_library(Wloger STATIC ${SRC} )
 
 
 add_executable(test ${SRC} "test//test.cpp")
