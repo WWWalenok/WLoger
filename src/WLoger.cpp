@@ -15,6 +15,24 @@
 #include <algorithm>
 #include <atomic>
 
+namespace __tc
+{
+    constexpr double hrt2ns = std::chrono::high_resolution_clock::period::num * 1e9 / double(std::chrono::high_resolution_clock::period::den);
+	constexpr double st2ns  = std::chrono::system_clock::period::num * 1e9 / double(std::chrono::system_clock::period::den);
+	constexpr double hrt2us = std::chrono::high_resolution_clock::period::num * 1e6 / double(std::chrono::high_resolution_clock::period::den);
+	constexpr double st2us  = std::chrono::system_clock::period::num * 1e6 / double(std::chrono::system_clock::period::den);
+    constexpr double hrt2ms = std::chrono::high_resolution_clock::period::num * 1e3 / double(std::chrono::high_resolution_clock::period::den);
+	constexpr double st2ms  = std::chrono::system_clock::period::num * 1e3 / double(std::chrono::system_clock::period::den);
+    constexpr double hrt2s = std::chrono::high_resolution_clock::period::num * 1e0 / double(std::chrono::high_resolution_clock::period::den);
+	constexpr double st2s  = std::chrono::system_clock::period::num * 1e0 / double(std::chrono::system_clock::period::den);
+	constexpr double st2hrt = 
+		double(std::chrono::system_clock::period::num * std::chrono::high_resolution_clock::period::den) / 
+		double(std::chrono::system_clock::period::den * std::chrono::high_resolution_clock::period::num);
+	constexpr double hrt2st = 
+		double(std::chrono::high_resolution_clock::period::num * std::chrono::system_clock::period::den) / 
+		double(std::chrono::high_resolution_clock::period::den * std::chrono::system_clock::period::num);
+};
+
 void __wloger_INIT_NATIVE();
 void __wloger_INIT();
 
@@ -282,18 +300,10 @@ static std::string __base_generate_prefix_func(unsigned int level, std::string f
 			_file.clear();
 	};
 
-	constexpr double hrt2us = std::chrono::high_resolution_clock::period::num * 1e6 / double(std::chrono::high_resolution_clock::period::den);
-	constexpr double st2us  = std::chrono::system_clock::period::num * 1e6 / double(std::chrono::system_clock::period::den);
-	constexpr double st2hrt = 
-		double(std::chrono::system_clock::period::num * std::chrono::high_resolution_clock::period::den) / 
-		double(std::chrono::system_clock::period::den * std::chrono::high_resolution_clock::period::num);
-	constexpr double hrt2st = 
-		double(std::chrono::high_resolution_clock::period::num * std::chrono::system_clock::period::den) / 
-		double(std::chrono::high_resolution_clock::period::den * std::chrono::system_clock::period::num);
-	static const size_t st_offset = size_t(wlogger_start_data_time.time_since_epoch().count() * st2hrt) % size_t(1e10);
-	int us = size_t((ns - wlogger_start_ns + st_offset) * hrt2us) % 1000000;
+	static const size_t st_offset = size_t(wlogger_start_data_time.time_since_epoch().count() * __tc::st2hrt) % size_t(1e10);
+	int us = size_t((ns - wlogger_start_ns + st_offset) * __tc::hrt2us) % 1000000;
 
-	auto tm = wlogger_start_data_time + std::chrono::system_clock::duration(size_t((ns - wlogger_start_ns) * hrt2st));
+	auto tm = wlogger_start_data_time + std::chrono::system_clock::duration(size_t((ns - wlogger_start_ns) * __tc::hrt2st));
 	
 	std::time_t tp = std::chrono::system_clock::to_time_t(tm);
 	char buff[256];
@@ -487,9 +497,9 @@ std::string __wlog_profiler_get_stat()
 			<< "{"
 			<< "\"Name\": \"" << t->name << "\","
 			<< "\"Time_resolution\": \"ms\","
-			<< "\"Total\": " << t->acc * 1e-6 << ","
+			<< "\"Total\": " << t->acc * __tc::hrt2ms << ","
 			<< "\"Total_calls\": " << t->cnt << ","
-			<< "\"Avg_for_call\": " << t->acc * 1e-6 / double(t->cnt) << ""
+			<< "\"Avg_for_call\": " << t->acc * __tc::hrt2ms / double(t->cnt) << ""
 			<< "}"
 		;
 		t->unlock();

@@ -256,7 +256,7 @@ static const unsigned char WL_DEBUG = 0x90u;
 
 struct __WL_START_TYMETRACE_guard_t
 {
-    std::chrono::steady_clock::time_point __WL__TIMER__START = std::chrono::high_resolution_clock::now();
+    size_t __WL__TIMER__START = std::chrono::high_resolution_clock::now().time_since_epoch().count();
     std::string file; 
     std::string func;
     __WL_START_TYMETRACE_guard_t(std::string file, std::string func) :
@@ -266,7 +266,7 @@ struct __WL_START_TYMETRACE_guard_t
     }
     ~__WL_START_TYMETRACE_guard_t()
     {
-        __wlog_acc_stat(file.c_str(), func.c_str(), (std::chrono::high_resolution_clock::now() - __WL__TIMER__START).count());
+        __wlog_acc_stat(file.c_str(), func.c_str(), std::chrono::high_resolution_clock::now().time_since_epoch().count() - __WL__TIMER__START);
     }
 };
 
