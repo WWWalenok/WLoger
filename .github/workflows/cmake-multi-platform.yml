@@ -60,7 +60,7 @@ jobs:
       id: strings1
       shell: bash
       run: |
-          cd ${{ github.workspace }} && ls -al
+          cd ${{ github.workspace }} && ls -al && cd .. && ls -al && cd .. && ls -al && cd .. && ls -al && cd ..
     - name: Configure CMake
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
