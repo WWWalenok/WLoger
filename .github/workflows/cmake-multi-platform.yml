@@ -41,6 +41,7 @@ jobs:
             c_compiler: cl
 
     steps:
+    - uses: actions/checkout@v4
     - name: Set reusable strings
       id: strings
       shell: bash
@@ -51,6 +52,11 @@ jobs:
       shell: bash
       run: |
           cd ${{ github.workspace }} && ls -al && cd .. && ls -al && cd .. && ls -al && cd .. && ls -al && cd ..
+    - name: Set reusable strings
+      # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
+      shell: bash
+      run: |
+        ls -al
     - name: Configure CMake
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
