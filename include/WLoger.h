@@ -100,7 +100,7 @@
 
 #undef WLOG_FUNC
 #if defined(_MSC_VER)  // Visual C++
-#define WLOG_FUNC __FUNCSIG__
+#define WLOG_FUNC __FUNCTION__
 #elif WLOG_COMPILER_GCC  // GCC
 #define WLOG_FUNC __PRETTY_FUNCTION__
 #elif WLOG_COMPILER_INTEL  // Intel C++
@@ -118,26 +118,14 @@
 #if WLOG_OS_WINDOWS
 #include <windows.h>
 #include "dbghelp.h"
-
-#include <windows.h>
-#include "dbghelp.h"
-
-// based on dbghelp.h
-typedef BOOL(WINAPI* WLOG_MINIDUMPWRITEDUMP)(HANDLE hProcess, DWORD dwPid, HANDLE hFile, MINIDUMP_TYPE DumpType,
-	CONST PMINIDUMP_EXCEPTION_INFORMATION ExceptionParam,
-	CONST PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam,
-	CONST PMINIDUMP_CALLBACK_INFORMATION CallbackParam
-	);
-
-LONG WINAPI TopLevelFilter(struct _EXCEPTION_POINTERS* pExceptionInfo);
-
 #endif
 
-static void __WLogerShutdown();
+void __WLogerShutdown();
 
-const static char WLOG_VERSION[] = "0.0.3";
+const static char WLOG_VERSION[] = "0.1.0";
 
-static const auto wlogger_start_time = std::chrono::high_resolution_clock::now();
+static const size_t wlogger_start_ns = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+static const auto wlogger_start_data_time = std::chrono::system_clock::now();
 
 struct __MESSAGE_DATA;
 
@@ -168,10 +156,10 @@ struct __MESSAGE
     ~__MESSAGE();
 };
 
-typedef __MESSAGE_DATA wlmesage_t;
+typedef __MESSAGE_DATA wlmesasge_t;
 
 
-typedef std::string(*__generate_prefix_func_type)(unsigned int, std::string file, std::string func, std::string cond, unsigned int line, std::chrono::system_clock::time_point time, uint32_t straem_id);
+typedef std::string(*__generate_prefix_func_type)(unsigned int, std::string file, std::string func, std::string cond, unsigned int line, size_t ns, uint32_t straem_id);
 
 extern __generate_prefix_func_type __wloger_generate_prefix_func;
 
@@ -193,15 +181,25 @@ void __wloger_generate_log_files(std::string path);
 
 void __wloger_generate_log_files(std::string path);
 
-unsigned int __wlog_get_log_level();
+unsigned char __wlog_get_log_level();
 
 void __wlog_set_log_level(unsigned int);
 
-static const unsigned int WL_FATAL = 0x1000u;
-static const unsigned int WL_ERROR = 0x2000u;
-static const unsigned int WL_WARNING = 0x3000u;
-static const unsigned int WL_INFO = 0x4000u;
-static const unsigned int WL_DEBUG = 0x5000u;
+void __wlog_acc_stat(const char* file, const char* func, size_t acc);
+
+std::string __wlog_profiler_get_stat();
+
+void __wlog_profiler_push_stat();
+
+void __wlog_force_flush_buffers();
+
+#define WLOG_FLUSH __wlog_force_flush_buffers()
+
+static const unsigned char WL_FATAL = 0x10u;
+static const unsigned char WL_ERROR = 0x30u;
+static const unsigned char WL_WARNING = 0x50u;
+static const unsigned char WL_INFO = 0x70u;
+static const unsigned char WL_DEBUG = 0x90u;
 
 #define __WLOG_VALUE_TSTR(val) #val
 
@@ -255,4 +253,27 @@ static const unsigned int WL_DEBUG = 0x5000u;
 
 #undef max
 #undef min
+
+struct __WL_START_TYMETRACE_guard_t
+{
+    std::chrono::steady_clock::time_point __WL__TIMER__START = std::chrono::high_resolution_clock::now();
+    std::string file; 
+    std::string func;
+    __WL_START_TYMETRACE_guard_t(std::string file, std::string func) :
+        file(file), func(func)
+    {
+
+    }
+    ~__WL_START_TYMETRACE_guard_t()
+    {
+        __wlog_acc_stat(file.c_str(), func.c_str(), (std::chrono::high_resolution_clock::now() - __WL__TIMER__START).count());
+    }
+};
+
+#define WL_START_TYMETRACE __WL_START_TYMETRACE_guard_t __WL_START_TYMETRACE_guard(__FILE__, WLOG_FUNC) 
+
+#define WL_TYMETRACE_STAT __wlog_profiler_get_stat()
+
+#define WL_TYMETRACE_PUSH_TO_WLOG __wlog_profiler_push_stat()
+
 #endif // __WLOGER_H__
