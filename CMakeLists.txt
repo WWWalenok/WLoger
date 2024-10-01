@@ -2,10 +2,6 @@ cmake_minimum_required(VERSION 3.0.0)
 
 project(Wloger VERSION 0.1.0)
 
-set(CMAKE_BUILD_TYPE Release)
-
-set(CMAKE_CXX_FLAGS_RELEASE "-O2")
-
 set(SRC
 	${CMAKE_SOURCE_DIR}/src/WLoger.cpp 
 	${CMAKE_SOURCE_DIR}/include/WLoger.h
@@ -24,6 +20,6 @@ set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 add_library(DWloger SHARED ${SRC} )
 add_library(Wloger STATIC ${SRC} )
 
+add_executable(test "test/test.cpp")
 
-add_executable(test ${SRC} "test/test.cpp")
-
+target_link_libraries(test PUBLIC Wloger)
