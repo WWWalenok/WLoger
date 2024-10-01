@@ -47,11 +47,6 @@ jobs:
       shell: bash
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
-    - name: check dir
-      id: strings1
-      shell: bash
-      run: |
-          cd ${{ github.workspace }} && ls -al && cd .. && ls -al && cd .. && ls -al && cd .. && ls -al && cd ..
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
       shell: bash
