@@ -5,6 +5,7 @@
 
 void temp() 
 {
+    WL_START_TYMETRACE;
     for(int i = 0; i < 5000; i++)
     {
         WLE << "123123" << __WLOG_VALUE_TSTR(asdasdasdasd);
@@ -15,6 +16,7 @@ void temp()
 #include <thread>
 int main()
 {
+    WL_START_TYMETRACE;
 	WLOG_ATTACH_STRAEM(WL_ERROR, std::cout);
 	WLOG_ATTACH_STRAEM(WL_WARNING, std::cout);
 	WLOG_ATTACH_STRAEM(WL_INFO, std::cout);

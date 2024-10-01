@@ -39,8 +39,24 @@ void __wloger_INIT();
 std::thread* sender_thread;
 bool stop_sender = false;
 
+
+struct __profiler_t
+{
+	size_t acc = 0;
+	size_t cnt = 0;
+	std::string name = "";
+    
+    void lock() { while (flag.test_and_set(std::memory_order_acquire)); }
+    void unlock() { flag.clear(std::memory_order_release); }
+
+    std::atomic_flag flag{};
+
+	__profiler_t() { flag.clear(); }
+};
+
 struct Guard 
 {
+    std::unordered_map<unsigned int, __profiler_t*> __profiler  = std::unordered_map<unsigned int, __profiler_t*>();
 	Guard()
 	{
 		__wloger_INIT();
@@ -48,6 +64,7 @@ struct Guard
 
 	~Guard() 
 	{
+
 		stop_sender = true;
 		sender_thread->join();
 	}
@@ -81,22 +98,6 @@ struct __wlog__locker
 	__wlog__lock_guard_t lock_guard() { return __wlog__lock_guard_t(this); }
 };
 
-struct __profiler_t
-{
-	size_t acc = 0;
-	size_t cnt = 0;
-	std::string name = "";
-    
-    void lock() { while (flag.test_and_set(std::memory_order_acquire)); }
-    void unlock() { flag.clear(std::memory_order_release); }
-
-    std::atomic_flag flag{};
-
-	__profiler_t() { flag.clear(); }
-};
-
-std::unordered_map<unsigned int, __profiler_t*> __profiler  = std::unordered_map<unsigned int, __profiler_t*>();
-
 void __wlog_acc_stat(const char* file, const char* func, size_t acc)
 {
 	static __wlog__locker locker;
@@ -112,7 +113,7 @@ void __wlog_acc_stat(const char* file, const char* func, size_t acc)
     auto h = h1 ^ h2;
 	__profiler_t* t = new __profiler_t();
 	locker.lock();
-	auto r = __profiler.emplace(h, t);
+	auto r = guard.__profiler.emplace(h, t);
 	locker.unlock();
 	if(r.second)
 	{
@@ -489,7 +490,7 @@ std::string __wlog_profiler_get_stat()
 	auto buff = std::stringstream();
 	int i = 0;
 	buff << "profiling statistic:[";
-	for(auto& el: __profiler)
+	for(auto& el: guard.__profiler)
 	{
 		auto& t = el.second;
 		t->lock();
