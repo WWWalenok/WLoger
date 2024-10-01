@@ -13,6 +13,106 @@
 #include <unordered_map>
 #include <cmath>
 #include <algorithm>
+#include <atomic>
+
+void __wloger_INIT_NATIVE();
+void __wloger_INIT();
+
+std::thread* sender_thread;
+bool stop_sender = false;
+
+struct Guard 
+{
+	Guard()
+	{
+		__wloger_INIT();
+	}
+
+	~Guard() 
+	{
+		stop_sender = true;
+		sender_thread->join();
+	}
+};
+
+Guard guard = Guard();
+
+struct __wlog__locker
+{
+    void lock() { while (flag.test_and_set(std::memory_order_acquire)); }
+    void unlock() { flag.clear(std::memory_order_release); }
+
+	__wlog__locker() { flag.clear(); }
+
+    std::atomic_flag flag{};
+
+	struct __wlog__lock_guard_t
+	{
+		__wlog__lock_guard_t(__wlog__locker* ori)
+		{
+			parent = ori;
+			parent->lock();
+		}
+		__wlog__locker* parent;
+		~__wlog__lock_guard_t()
+		{
+			parent->unlock();
+		}
+	};
+
+	__wlog__lock_guard_t lock_guard() { return __wlog__lock_guard_t(this); }
+};
+
+struct __profiler_t
+{
+	size_t acc = 0;
+	size_t cnt = 0;
+	std::string name = "";
+    
+    void lock() { while (flag.test_and_set(std::memory_order_acquire)); }
+    void unlock() { flag.clear(std::memory_order_release); }
+
+    std::atomic_flag flag{};
+
+	__profiler_t() { flag.clear(); }
+};
+
+std::unordered_map<unsigned int, __profiler_t*> __profiler  = std::unordered_map<unsigned int, __profiler_t*>();
+
+void __wlog_acc_stat(const char* file, const char* func, size_t acc)
+{
+	static __wlog__locker locker;
+
+	unsigned int h1 = 5381;
+    for (const unsigned char* ptr = (const unsigned char*)file; *ptr; ptr++) 
+        h1 = ((h1 << 5) + h1) + *ptr;
+    
+    unsigned int h2 = 0;
+	for (const unsigned char* ptr = (const unsigned char*)func; *ptr; ptr++) 
+        h2 = *ptr + (h2 << 6) + (h2 << 16) - h2;
+    
+    auto h = h1 ^ h2;
+	__profiler_t* t = new __profiler_t();
+	locker.lock();
+	auto r = __profiler.emplace(h, t);
+	locker.unlock();
+	if(r.second)
+	{
+		r.first->second->lock();
+		r.first->second->acc = acc;
+		r.first->second->cnt = 1;
+		r.first->second->name = func;
+		r.first->second->unlock();
+	}
+	else
+	{
+		r.first->second->lock();
+		r.first->second->acc += acc;
+		r.first->second->cnt += 1;
+		r.first->second->unlock();
+	}
+}
+
 
 #if WLOG_COMPILER_GCC
     #define va_start(v,l)   __builtin_va_start(v,l)
@@ -20,9 +120,9 @@
     #define va_arg(v,l)     __builtin_va_arg(v,l)
 #endif
 
-unsigned int __wlog_level = 0xffffu;
+unsigned char __wlog_level = 0xffu;
 
-unsigned int __wlog_get_log_level()
+unsigned char __wlog_get_log_level()
 {
     return __wlog_level;
 }
@@ -36,28 +136,50 @@ __generate_prefix_func_type __wloger_generate_prefix_func;
 
 __MESSAGE __BAD_BUFFER(nullptr);
 
-std::thread* sender_thread;
+struct __wlog__logger_data
+{
+	std::vector<std::ostream*> out_streams;
+	std::string name;
+	std::vector<wlmesasge_t*> messages;
+	__wlog__locker locker;
+};
 
-bool stop_sender = false;
-
-std::unordered_map<unsigned int, std::vector<std::ostream*>> __loger__out__streams = std::unordered_map<unsigned int, std::vector<std::ostream*>>();
-std::unordered_map<unsigned int, std::string> __loger__name = std::unordered_map<unsigned int, std::string>();
-std::unordered_map<unsigned int, std::vector<wlmesage_t*>> __loger__buffers = std::unordered_map<unsigned int, std::vector<wlmesage_t*>>();
-std::unordered_map<unsigned int, std::mutex*> __loger__buffers_mutex = std::unordered_map<unsigned int, std::mutex*>();
-
+__wlog__logger_data* __logers[0x100];
 
 struct __MESSAGE_DATA
 {
     std::stringstream message;
-	std::chrono::system_clock::time_point time;
+	size_t ns;
 	std::string file_name;
 	std::string func_name;
     std::string cond_str;
 	unsigned int line;
 	unsigned int level;
 	uint32_t straem_id;
-    std::mutex mutex;
     bool in_process;
+    
+    void lock() { while (flag.test_and_set(std::memory_order_acquire)); }
+    void unlock() { flag.clear(std::memory_order_release); }
+
+	__MESSAGE_DATA() { flag.clear(); }
+
+    std::atomic_flag flag{};
+
+	struct lock_guard_t
+	{
+		lock_guard_t(__MESSAGE_DATA* ori)
+		{
+			parent = ori;
+			parent->lock();
+		}
+		__MESSAGE_DATA* parent;
+		~lock_guard_t()
+		{
+			parent->unlock();
+		}
+	};
+
+	lock_guard_t lock_guard() { return lock_guard_t(this); }
 };
 
 __MESSAGE::__MESSAGE(void* dt)
@@ -66,7 +188,7 @@ __MESSAGE::__MESSAGE(void* dt)
     if(!data)
         return;
     auto message = (__MESSAGE_DATA*)data;
-    std::lock_guard<std::mutex> lg(message->mutex);
+	message->lock_guard();
     message->in_process = true;
 }
 
@@ -75,7 +197,7 @@ void __MESSAGE::print(std::string str)
     if(!data)
         return;
     auto message = (__MESSAGE_DATA*)data;
-    std::lock_guard<std::mutex> lg(message->mutex);
+	message->lock_guard();
     message->in_process = true;
 
     message->message << str;
@@ -86,49 +208,48 @@ __MESSAGE::~__MESSAGE()
     if(!data)
         return;
     auto message = (__MESSAGE_DATA*)data;
-    std::lock_guard<std::mutex> lg(message->mutex);
+	message->lock_guard();
     message->in_process = false;
-    std::lock_guard<std::mutex> guard(*__loger__buffers_mutex[message->level]);
-    __loger__buffers[message->level].push_back(message);
+    __logers[message->level]->locker.lock();
+    __logers[message->level]->messages.push_back(message);
+	__logers[message->level]->locker.unlock();
 }
 
 
 void __wloger_generate_loger(unsigned int level, std::string name)
 {
-	__loger__name[level] = name; 
-	if (!__wloger_cond(level))
+	if(__logers[level] == nullptr)
 	{
-		__loger__out__streams[level] = std::vector<std::ostream*>();
-		__loger__buffers[level] = std::vector<wlmesage_t*>();
-		__loger__buffers_mutex[level] = new std::mutex();
+		__logers[level] = new __wlog__logger_data();
+		__logers[level]->name = name;
 	}
 }
 
 void __wloger_rename_loger(unsigned int level, std::string name)
 {
-	if(__wloger_cond(level))
-		__loger__name[level] = name;
+	if(__logers[level] == nullptr)
+	{
+		__logers[level] = new __wlog__logger_data();
+	}
+	__logers[level]->name = name;
 }
 
 
 bool __wloger_cond(unsigned int level)
 {
-	return __loger__out__streams.find(level) != __loger__out__streams.end() 
-		&& __loger__name.find(level) != __loger__name.end() 
-		&& __loger__buffers.find(level) != __loger__buffers.end()
-		&& __loger__buffers_mutex.find(level) != __loger__buffers_mutex.end();
+	return __logers[level] != nullptr;
 }
 
 bool __wloger_attach_stream(unsigned int level, std::ostream* stream)
 {
 	if (__wloger_cond(level))
 	{
-		auto *strams = &__loger__out__streams[level];
+		auto *strams = &__logers[level]->out_streams;
 		bool unic = true;
 		for (int i = 0; i < strams->size() && unic; i++)
 			unic = (stream != strams->operator[](i));
 		if(unic)
-			__loger__out__streams[level].push_back(stream);
+			__logers[level]->out_streams.push_back(stream);
 	}
 	else
 		return false;
@@ -139,7 +260,7 @@ bool __wloger_detach_stream(unsigned int level, std::ostream* stream)
 {
 	if (__wloger_cond(level))
 	{
-		auto s = &__loger__out__streams[level];
+		auto s = &__logers[level]->out_streams;
 		for(int i = 0; i < s->size(); i++)
 			if (s->operator[](i) == stream)
 			{
@@ -150,22 +271,34 @@ bool __wloger_detach_stream(unsigned int level, std::ostream* stream)
 	return false;
 }
 
-static std::string __base_generate_prefix_func(unsigned int level, std::string file, std::string func, std::string cond, unsigned int line, std::chrono::system_clock::time_point time, uint32_t straem_id)
+static std::string __base_generate_prefix_func(unsigned int level, std::string file, std::string func, std::string cond, unsigned int line, size_t ns, uint32_t straem_id)
 {
 	size_t lenght = file.length();
 	std::string _file = "";
 	for (size_t i = 0; i < lenght; i++)
 	{
 		_file.append(1, file[i]);
-		if (file[i] == '\\')
+		if (file[i] == '\\' || file[i] == '/')
 			_file.clear();
 	};
 
-	size_t ms = std::round(double(std::chrono::duration<double, std::milli>(time.time_since_epoch()).count()));
-	std::time_t tp = std::chrono::system_clock::to_time_t(time);
+	constexpr double hrt2us = std::chrono::high_resolution_clock::period::num * 1e6 / double(std::chrono::high_resolution_clock::period::den);
+	constexpr double st2us  = std::chrono::system_clock::period::num * 1e6 / double(std::chrono::system_clock::period::den);
+	constexpr double st2hrt = 
+		double(std::chrono::system_clock::period::num * std::chrono::high_resolution_clock::period::den) / 
+		double(std::chrono::system_clock::period::den * std::chrono::high_resolution_clock::period::num);
+	constexpr double hrt2st = 
+		double(std::chrono::high_resolution_clock::period::num * std::chrono::system_clock::period::den) / 
+		double(std::chrono::high_resolution_clock::period::den * std::chrono::system_clock::period::num);
+	static const size_t st_offset = size_t(wlogger_start_data_time.time_since_epoch().count() * st2hrt) % size_t(1e10);
+	int us = size_t((ns - wlogger_start_ns + st_offset) * hrt2us) % 1000000;
+
+	auto tm = wlogger_start_data_time + std::chrono::system_clock::duration(size_t((ns - wlogger_start_ns) * hrt2st));
+	
+	std::time_t tp = std::chrono::system_clock::to_time_t(tm);
 	char buff[256];
     auto lct = std::localtime(&tp);
-	auto count = snprintf(buff, 256, "[%.2i:%.2i:%.2i.%.3i] ", lct->tm_hour, lct->tm_min, lct->tm_sec, int(ms % 1000));
+	auto count = snprintf(buff, 256, "[%.2i:%.2i:%.2i.%.6i] ", lct->tm_hour, lct->tm_min, lct->tm_sec, us);
 
 
 	std::string out;
@@ -176,9 +309,9 @@ static std::string __base_generate_prefix_func(unsigned int level, std::string f
 	out.append(" ");
 	out.append(std::to_string(straem_id));
     out.append(" ");
-    // if(func.size() > 50)
-    //     func = func.substr(0,47) + "...";
-    // out.append(func);
+    if(func.size() > 100)
+        func = func.substr(0,97) + "...";
+    out.append(func);
     if(cond == "true")
 	    out.append(": ");
     else
@@ -188,34 +321,42 @@ static std::string __base_generate_prefix_func(unsigned int level, std::string f
         out.append("): ");
     }
     
-	if (__loger__name.find(level) != __loger__name.end())
-		if (__loger__name[level].length() > 0)
+	if (__wloger_cond(level))
+	{
+		auto name = __logers[level]->name;
+		if (name.length() > 0)
 		{
-			out.append(__loger__name[level]);
+			out.append(name);
 			out.append(": ");
 		}
+	}
 	return out;
 }
 
-std::string generate_prefix_func_from_message(wlmesage_t* m)
+std::string generate_prefix_func_from_message(wlmesasge_t* m)
 {
-    return __wloger_generate_prefix_func(m->level, m->file_name, m->func_name, m->cond_str, m->line, m->time, m->straem_id);
+    return __wloger_generate_prefix_func(m->level, m->file_name, m->func_name, m->cond_str, m->line, m->ns, m->straem_id);
 }
 
 void __wloger_send()
 {
+	static __wlog__locker locker;
+	
+	locker.lock();
+
 	std::vector<unsigned int> loger__buffers__levels;
-	std::vector<std::vector<wlmesage_t*>> loger__buffers__queue;
+	std::vector<std::vector<wlmesasge_t*>> loger__buffers__queue;
 	std::vector<uint32_t> loger__buffers__lasts;
-	for (auto pair_streams : __loger__out__streams)
+	for (int level = 0; level < 0x100; ++level) if(__logers[level] != nullptr)
 	{
-		auto level = pair_streams.first;
+		auto data = __logers[level];
 		{
-			std::lock_guard<std::mutex> guard(*__loger__buffers_mutex[level]);
-			loger__buffers__queue.push_back(__loger__buffers[level]);
+			data->locker.lock();
+			loger__buffers__queue.push_back(data->messages);
 			loger__buffers__levels.push_back(level);
-			__loger__buffers[level] = std::vector<wlmesage_t*>();
+			data->messages = std::vector<wlmesasge_t*>();
 			loger__buffers__lasts.push_back(0);
+			data->locker.unlock();
 		}
 	}
 	bool count = true;
@@ -223,8 +364,8 @@ void __wloger_send()
 	std::unordered_map<std::ostream*, std::string> str_buffers;
     std::unordered_map<std::ostream*, std::ostream*> stream_buffers;
 
-	for (auto _pair : __loger__out__streams)
-		for (auto stream : _pair.second)
+	for (int level = 0; level < 0x100; ++level) if(__logers[level] != nullptr)
+		for (auto stream : __logers[level]->out_streams)
         {
 			str_buffers[stream] = "";
             stream_buffers[stream] = stream;
@@ -235,7 +376,7 @@ void __wloger_send()
 
     struct temp_t
     {
-        wlmesage_t* message = 0;
+        wlmesasge_t* message = 0;
         int i = -1;
         int64_t ts = -1;
 
@@ -251,7 +392,7 @@ void __wloger_send()
     {
         for(auto el : loger__buffers__queue[i])
         {
-            int64_t ns = (std::chrono::nanoseconds(el->time.time_since_epoch())).count();
+            int64_t ns = el->ns;
             mes_buffer.push_back({
                 el,
                 i,
@@ -269,7 +410,7 @@ void __wloger_send()
 	for(auto& mes : mes_buffer)
 	{
 		count = false;
-		wlmesage_t* best = mes.message;
+		wlmesasge_t* best = mes.message;
 		int best_i = mes.i;
 		if (best)
 		{
@@ -288,7 +429,7 @@ void __wloger_send()
                 if(buffer || ostr.size() > 0)
                 {
                     if (i != 0)
-                        str_buffer.append("|            | ");
+                        str_buffer.append("                  ");
                     
                     str_buffer.append(ostr).append("\n");
                     i++;
@@ -296,7 +437,7 @@ void __wloger_send()
 				
 			}
 
-			for (auto stream : __loger__out__streams[best->level])
+			for (auto stream : __logers[best->level]->out_streams)
 				str_buffers[stream].append(str_buffer);
 
 			buffer.clear();
@@ -311,52 +452,71 @@ void __wloger_send()
             stream_pair.second->flush();
 		};
 			
+	locker.unlock();
 }
 
-void  __wloger_sender()
+void __wloger_sender()
 {
+
 	bool _stop_sender = false;
+	
 	while (!_stop_sender)
 	{
-		std::chrono::milliseconds timespan(20);
-		std::this_thread::sleep_for(timespan);
+		auto ts = std::chrono::high_resolution_clock::now();
+		static const std::chrono::nanoseconds timespan(size_t(20 * 10e6));
 		_stop_sender = stop_sender;
+		if(_stop_sender)
+			__wloger_generate_loger_buffer(WL_INFO, true, "true", "END", "", 0) << __wlog_profiler_get_stat();
 		__wloger_send();
-
+		auto ts2 = std::chrono::high_resolution_clock::now();
+		std::this_thread::sleep_for(timespan - (ts2 - ts));
 	}
+}
+
+
+std::string __wlog_profiler_get_stat()
+{
+	auto buff = std::stringstream();
+	int i = 0;
+	buff << "profiling statistic:[";
+	for(auto& el: __profiler)
+	{
+		auto& t = el.second;
+		t->lock();
+		buff << (i == 0 ? "" : ",")
+			<< "{"
+			<< "\"Name\": \"" << t->name << "\","
+			<< "\"Time_resolution\": \"ms\","
+			<< "\"Total\": " << t->acc * 1e-6 << ","
+			<< "\"Total_calls\": " << t->cnt << ","
+			<< "\"Avg_for_call\": " << t->acc * 1e-6 / double(t->cnt) << ""
+			<< "}"
+		;
+		t->unlock();
+		++i;
+	}
+	buff << "]";
+
+	return buff.str();
+}
+
+void __wlog_profiler_push_stat()
+{
+	__wloger_generate_loger_buffer(WL_INFO, true, "true", "PROFILER", "", 0) << __wlog_profiler_get_stat();
+	__wlog_force_flush_buffers();
+}
+
+void __wlog_force_flush_buffers()
+{
+	__wloger_send();
 }
 
 typedef	void (*__sig_fn_t)(int);
 
 void __wloger_INIT()
 {
-#define SIGNAL_HANDLER(SIGNAL) static const __sig_fn_t __##SIGNAL##__base_handler = signal(SIGNAL, [](int){ \
-    std::cout << "Unhandled exception: " #SIGNAL "\n" << std::flush; \
-    __wloger_generate_loger_buffer(WL_FATAL, true, "true", "SIGNAL_HANDLER", "", 0) << "Unhandled exception: " #SIGNAL; \
-    __WLogerShutdown(); \
-    signal(SIGNAL, __##SIGNAL##__base_handler); \
-    raise(SIGNAL); \
-})
-#ifdef SIGTERM
-    SIGNAL_HANDLER(SIGTERM);
-#endif
-#ifdef SIGSEGV
-    SIGNAL_HANDLER(SIGSEGV);
-#endif
-#ifdef SIGINT
-    SIGNAL_HANDLER(SIGINT);
-#endif
-#ifdef SIGILL
-    SIGNAL_HANDLER(SIGILL);
-#endif
-#ifdef SIGABRT
-    SIGNAL_HANDLER(SIGABRT);
-#endif
-#ifdef SIGFPE
-    SIGNAL_HANDLER(SIGFPE);
-#endif
-#undef SIGNAL_HANDLER
-
+	for(int i = 0; i < 0x100; ++i)
+		__logers[i] = nullptr;
 	__wloger_generate_prefix_func = __base_generate_prefix_func;
     WLOG_GENERATE_LOGER(WL_FATAL, "FATAL");
 	WLOG_GENERATE_LOGER(WL_ERROR, "ERROR");
@@ -365,34 +525,34 @@ void __wloger_INIT()
     WLOG_GENERATE_LOGER(WL_DEBUG, "DEBUG");
 
 	sender_thread = new std::thread(&__wloger_sender);
+	__wloger_INIT_NATIVE();
 }
 
 __MESSAGE __wloger_generate_loger_buffer(unsigned int level, bool cond, const char* cond_str, const char* file, const char* func, unsigned int line)
 {
-	if (cond && WLOG_LEVEL_COND(level)) {
-		std::chrono::system_clock::time_point tp;
-
-		tp = std::chrono::system_clock::now();
+	size_t ns = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+	if (cond && __wlog_level >= level && __logers[level] != nullptr) {
 
 		auto id = std::this_thread::get_id();
 		uint32_t _id = *((uint32_t*)((void*)(&id)));
 
-		wlmesage_t* mesage = new wlmesage_t;
-		mesage->file_name = file;
-        mesage->func_name = func;
-        mesage->cond_str = cond_str;
-        mesage->level = level;
-        mesage->line = line;
-        mesage->straem_id = _id;
-        mesage->time = tp;
-        return __MESSAGE(mesage);
+		wlmesasge_t* message = new wlmesasge_t;
+		message->file_name = file;
+        message->func_name = func;
+        message->cond_str = cond_str;
+        message->level = level;
+        message->line = line;
+        message->straem_id = _id;
+		message->ns = ns;
+        return __MESSAGE(message);
 	}
 	return __MESSAGE(nullptr);
 }
 
 void __wloger_printf(unsigned int level, bool cond, const char* cond_str, const char* file, const char* func, unsigned int line, const char* format, ...)
 {
-    if (!cond || !WLOG_LEVEL_COND(level))
+	size_t ns = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+    if (!cond || !__wlog_level >= level || __logers[level] == nullptr)
         return;
     va_list args;
     va_start(args, format);
@@ -403,26 +563,22 @@ void __wloger_printf(unsigned int level, bool cond, const char* cond_str, const 
     vsnprintf(buff.data(), len + 2, format, args);
     va_end(args);
 
-    std::chrono::system_clock::time_point tp;
-
-    tp = std::chrono::system_clock::now();
 
     auto id = std::this_thread::get_id();
     uint32_t _id = *((uint32_t*)((void*)(&id)));
 
-    wlmesage_t* mesage = new wlmesage_t;
-    mesage->file_name = file;
-    mesage->func_name = func;
-    mesage->cond_str = cond_str;
-    mesage->level = level;
-    mesage->line = line;
-    mesage->straem_id = _id;
-    mesage->time = tp;
-
-    auto ret = __MESSAGE(mesage);
-
-    ret.print(buff.data());
+    wlmesasge_t* message = new wlmesasge_t;
+    message->file_name = file;
+    message->func_name = func;
+    message->cond_str = cond_str;
+    message->level = level;
+    message->line = line;
+    message->straem_id = _id;
+	message->ns = ns;
+	
+    __MESSAGE(message).print(buff.data());
 }
+
 
 
 #include <fstream>
@@ -438,10 +594,9 @@ void __wloger_generate_log_files(std::string path)
     auto lct = std::localtime(&tp);
     char time_buff[512];
     snprintf(time_buff, 512, "Y%.2iM%.2iD%.2iTh%.2im%.2is%.2i", lct->tm_year % 100, lct->tm_mon, lct->tm_mday, lct->tm_hour, lct->tm_min, lct->tm_sec);
-	for (auto pair_name : __loger__name)
+	for (int level = 0; level < 0x100; ++level) if(__logers[level] != nullptr)
 	{
-		auto level = pair_name.first;
-		auto name = pair_name.second;
+		auto name = __logers[level]->name;
 
 		if (WLOG_LEVEL >= level)
 		{
@@ -456,22 +611,115 @@ void __wloger_generate_log_files(std::string path)
 	}
 }
 
-struct Guard 
-{
-	Guard()
-	{
-		__wloger_INIT();
-	}
-
-	~Guard() 
-	{
-		stop_sender = true;
-		sender_thread->join();
-	}
-};
-
-Guard guard = Guard();
-
-static void __WLogerShutdown() {
-	guard.~Guard();
+void __WLogerShutdown() {
+	stop_sender = true;
+	sender_thread->join();
 }
+
+#ifndef __APPLE__
+void __wloger_INIT_NATIVE() 
+{
+	#define SIGNAL_HANDLER(SIGNAL) static const __sig_fn_t __##SIGNAL##__base_handler = signal(SIGNAL, [](int){ \
+    std::cout << "Unhandled exception: " #SIGNAL "\n" << std::flush; \
+    __wloger_generate_loger_buffer(WL_FATAL, true, "true", "SIGNAL_HANDLER", "", 0) << "Unhandled exception: " #SIGNAL; \
+    __WLogerShutdown(); \
+    signal(SIGNAL, __##SIGNAL##__base_handler); \
+    raise(SIGNAL); \
+})
+#ifdef SIGHUP
+    SIGNAL_HANDLER(SIGHUP);
+#endif
+#ifdef SIGINT
+    SIGNAL_HANDLER(SIGINT);
+#endif
+#ifdef SIGQUIT
+    SIGNAL_HANDLER(SIGQUIT);
+#endif
+#ifdef SIGILL
+    SIGNAL_HANDLER(SIGILL);
+#endif
+#ifdef SIGTRAP
+    SIGNAL_HANDLER(SIGTRAP);
+#endif
+#ifdef SIGABRT
+    SIGNAL_HANDLER(SIGABRT);
+#endif
+#ifdef SIGEMT
+    SIGNAL_HANDLER(SIGEMT);
+#endif
+#ifdef SIGFPE
+    SIGNAL_HANDLER(SIGFPE);
+#endif
+#ifdef SIGKILL
+    SIGNAL_HANDLER(SIGKILL);
+#endif
+#ifdef SIGBUS
+    SIGNAL_HANDLER(SIGBUS);
+#endif
+#ifdef SIGSEGV
+    SIGNAL_HANDLER(SIGSEGV);
+#endif
+#ifdef SIGSYS
+    SIGNAL_HANDLER(SIGSYS);
+#endif
+#ifdef SIGPIPE
+    SIGNAL_HANDLER(SIGPIPE);
+#endif
+#ifdef SIGALRM
+    SIGNAL_HANDLER(SIGALRM);
+#endif
+#ifdef SIGTERM
+    SIGNAL_HANDLER(SIGTERM);
+#endif
+#ifdef SIGURG
+    SIGNAL_HANDLER(SIGURG);
+#endif
+#ifdef SIGSTOP
+    SIGNAL_HANDLER(SIGSTOP);
+#endif
+#ifdef SIGTSTP
+    SIGNAL_HANDLER(SIGTSTP);
+#endif
+#ifdef SIGCONT
+    SIGNAL_HANDLER(SIGCONT);
+#endif
+#ifdef SIGCHLD
+    SIGNAL_HANDLER(SIGCHLD);
+#endif
+#ifdef SIGTTIN
+    SIGNAL_HANDLER(SIGTTIN);
+#endif
+#ifdef SIGTTOU
+    SIGNAL_HANDLER(SIGTTOU);
+#endif
+#ifdef SIGIO
+    SIGNAL_HANDLER(SIGIO);
+#endif
+#ifdef SIGXCPU
+    SIGNAL_HANDLER(SIGXCPU);
+#endif
+#ifdef SIGXFSZ
+    SIGNAL_HANDLER(SIGXFSZ);
+#endif
+#ifdef SIGVTALRM
+    SIGNAL_HANDLER(SIGVTALRM);
+#endif
+#ifdef SIGPROF
+    SIGNAL_HANDLER(SIGPROF);
+#endif
+#ifdef SIGWINCH
+    SIGNAL_HANDLER(SIGWINCH);
+#endif
+#ifdef SIGINFO
+    SIGNAL_HANDLER(SIGINFO);
+#endif
+#ifdef SIGUSR1
+    SIGNAL_HANDLER(SIGUSR1);
+#endif
+#ifdef SIGUSR2
+    SIGNAL_HANDLER(SIGUSR2);
+#endif
+
+#undef SIGNAL_HANDLER
+}
+#endif

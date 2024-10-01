@@ -5,7 +5,12 @@
 
 void temp() 
 {
-	WLE << "123123" << __WLOG_VALUE_TSTR(asdasdasdasd);
+    for(int i = 0; i < 5000; i++)
+    {
+        WLE << "123123" << __WLOG_VALUE_TSTR(asdasdasdasd);
+        WLI << "123123" << __WLOG_VALUE_TSTR(asdasdasdasd);
+        WLW << "123123" << __WLOG_VALUE_TSTR(asdasdasdasd);
+    }
 }
 #include <thread>
 int main()
@@ -18,14 +23,14 @@ int main()
 
 	WLOG_GENERATE_LOG_FILE("build/log");
 
-	std::thread* ths[2];
+	std::thread* ths[20];
 	
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < 20; i++)
 	{
 		ths[i] = new std::thread(temp);
 
 	}
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < 20; i++)
 	{
 		ths[i]->join();
 
