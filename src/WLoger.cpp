@@ -630,16 +630,14 @@ void __WLogerShutdown() {
 #ifndef __APPLE__
 void __wloger_INIT_NATIVE() 
 {
-	#define SIGNAL_HANDLER(SIGNAL) static const __sig_fn_t __##SIGNAL##__base_handler = signal(SIGNAL, [](int){ \
+#define SIGNAL_HANDLER(SIGNAL) static const __sig_fn_t __##SIGNAL##__base_handler = signal(SIGNAL, [](int){ \
     std::cout << "Unhandled exception: " #SIGNAL "\n" << std::flush; \
     __wloger_generate_loger_buffer(WL_FATAL, true, "true", "SIGNAL_HANDLER", "", 0) << "Unhandled exception: " #SIGNAL; \
     __WLogerShutdown(); \
     signal(SIGNAL, __##SIGNAL##__base_handler); \
     raise(SIGNAL); \
 })
-#ifdef SIGHUP
-    SIGNAL_HANDLER(SIGHUP);
-#endif
+
 #ifdef SIGINT
     SIGNAL_HANDLER(SIGINT);
 #endif
@@ -655,80 +653,17 @@ void __wloger_INIT_NATIVE()
 #ifdef SIGABRT
     SIGNAL_HANDLER(SIGABRT);
 #endif
-#ifdef SIGEMT
-    SIGNAL_HANDLER(SIGEMT);
-#endif
 #ifdef SIGFPE
     SIGNAL_HANDLER(SIGFPE);
 #endif
 #ifdef SIGKILL
     SIGNAL_HANDLER(SIGKILL);
 #endif
-#ifdef SIGBUS
-    SIGNAL_HANDLER(SIGBUS);
-#endif
 #ifdef SIGSEGV
     SIGNAL_HANDLER(SIGSEGV);
 #endif
-#ifdef SIGSYS
-    SIGNAL_HANDLER(SIGSYS);
-#endif
-#ifdef SIGPIPE
-    SIGNAL_HANDLER(SIGPIPE);
-#endif
-#ifdef SIGALRM
-    SIGNAL_HANDLER(SIGALRM);
-#endif
 #ifdef SIGTERM
     SIGNAL_HANDLER(SIGTERM);
-#endif
-#ifdef SIGURG
-    SIGNAL_HANDLER(SIGURG);
-#endif
-#ifdef SIGSTOP
-    SIGNAL_HANDLER(SIGSTOP);
-#endif
-#ifdef SIGTSTP
-    SIGNAL_HANDLER(SIGTSTP);
-#endif
-#ifdef SIGCONT
-    SIGNAL_HANDLER(SIGCONT);
-#endif
-#ifdef SIGCHLD
-    SIGNAL_HANDLER(SIGCHLD);
-#endif
-#ifdef SIGTTIN
-    SIGNAL_HANDLER(SIGTTIN);
-#endif
-#ifdef SIGTTOU
-    SIGNAL_HANDLER(SIGTTOU);
-#endif
-#ifdef SIGIO
-    SIGNAL_HANDLER(SIGIO);
-#endif
-#ifdef SIGXCPU
-    SIGNAL_HANDLER(SIGXCPU);
-#endif
-#ifdef SIGXFSZ
-    SIGNAL_HANDLER(SIGXFSZ);
-#endif
-#ifdef SIGVTALRM
-    SIGNAL_HANDLER(SIGVTALRM);
-#endif
-#ifdef SIGPROF
-    SIGNAL_HANDLER(SIGPROF);
-#endif
-#ifdef SIGWINCH
-    SIGNAL_HANDLER(SIGWINCH);
-#endif
-#ifdef SIGINFO
-    SIGNAL_HANDLER(SIGINFO);
-#endif
-#ifdef SIGUSR1
-    SIGNAL_HANDLER(SIGUSR1);
-#endif
-#ifdef SIGUSR2
-    SIGNAL_HANDLER(SIGUSR2);
 #endif
 
 #undef SIGNAL_HANDLER
