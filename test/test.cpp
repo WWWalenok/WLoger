@@ -3,16 +3,21 @@
 
 #include <iostream>
 
+#include "ghc_filesystem.hpp"
+
 void temp() 
 {
     WL_START_TYMETRACE;
-    for(int i = 0; i < 5000; i++)
+    for(int i = 0; i < 5; i++)
     {
-        WLE << "123123" << __WLOG_VALUE_TSTR(asdasdasdasd);
-        WLI << "123123" << __WLOG_VALUE_TSTR(asdasdasdasd);
-        WLW << "123123" << __WLOG_VALUE_TSTR(asdasdasdasd);
+        WLE << "WL 123123 " << __WLOG_VALUE_TSTR(asdasdasdasd) " " << WLOG_VALUE(i);
+        WLW << "WL 123123 " << __WLOG_VALUE_TSTR(asdasdasdasd) " " << WLOG_VALUE(i);
+        PWLI("PWL 123123 asdasdasdasd i = %i;", i);
     }
 }
+
+
+
 #include <thread>
 int main()
 {
@@ -20,10 +25,10 @@ int main()
 	WLOG_ATTACH_STRAEM(WL_ERROR, std::cout);
 	WLOG_ATTACH_STRAEM(WL_WARNING, std::cout);
 	WLOG_ATTACH_STRAEM(WL_INFO, std::cout);
-	system("mkdir build");
-	system("mkdir build/log");
 
-	WLOG_GENERATE_LOG_FILE("build/log");
+    ghc::filesystem::create_directories("./build/log");
+
+	WLOG_GENERATE_LOG_FILE("./build/log/");
 
 	std::thread* ths[20];
 	

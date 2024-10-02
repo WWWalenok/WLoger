@@ -608,17 +608,12 @@ void __wloger_generate_log_files(std::string path)
 	for (int level = 0; level < 0x100; ++level) if(__logers[level] != nullptr)
 	{
 		auto name = __logers[level]->name;
+        auto filename = path;
+        
+        filename.append(name).append("_").append(time_buff).append(".log");
+        std::ofstream* fout = new std::ofstream(filename);
 
-		if (WLOG_LEVEL >= level)
-		{
-			auto filename = path;
-			
-
-			filename.append(name).append("_").append(time_buff).append(".log");
-			std::ofstream* fout = new std::ofstream(filename);
-
-			__wloger_attach_stream(level, fout);
-		}
+        __wloger_attach_stream(level, fout);
 	}
 }
 

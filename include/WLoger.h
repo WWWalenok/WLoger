@@ -249,7 +249,7 @@ static const unsigned char WL_DEBUG = 0x90u;
 #define WLF WLOG(WL_FATAL)
 #define PWLF(...) PWLOG(WL_FATAL, __VA_ARGS__)
 
-#define WLOG_VALUE(val) __WLOG_VALUE_TSTR(val) << " = " << val << "; "
+#define WLOG_VALUE(val) __WLOG_VALUE_TSTR(val) " = " << val << "; "
 
 #undef max
 #undef min
