@@ -64,9 +64,11 @@ struct Guard
 
 	~Guard() 
 	{
-
-		stop_sender = true;
-		sender_thread->join();
+        if(!stop_sender)
+        {
+            stop_sender = true;
+            sender_thread->join();
+        }
 	}
 };
 
@@ -618,15 +620,17 @@ void __wloger_generate_log_files(std::string path)
 }
 
 void __WLogerShutdown() {
-	stop_sender = true;
-	sender_thread->join();
+    if(!stop_sender)
+    {
+        stop_sender = true;
+        sender_thread->join();
+    }
 }
 
 #ifndef __APPLE__
 void __wloger_INIT_NATIVE() 
 {
 #define SIGNAL_HANDLER(SIGNAL) static const __sig_fn_t __##SIGNAL##__base_handler = signal(SIGNAL, [](int){ \
-    std::cout << "Unhandled exception: " #SIGNAL "\n" << std::flush; \
     __wloger_generate_loger_buffer(WL_FATAL, true, "true", "SIGNAL_HANDLER", "", 0) << "Unhandled exception: " #SIGNAL; \
     __WLogerShutdown(); \
     signal(SIGNAL, __##SIGNAL##__base_handler); \
